@@ -1,0 +1,7 @@
+[package]
+name = "beautiful_morning"
+version = "0.1.0"
+authors = ["Talos208 <talos208@gmail.com>"]
+
+[dependencies]
+nickel="*"
