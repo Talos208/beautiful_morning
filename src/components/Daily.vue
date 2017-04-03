@@ -20,23 +20,21 @@
 </template>
 
 <script>
+import axios from 'axios'
 export default {
   name: 'daily',
   data () {
     return {
       date: (new Date()).toLocaleDateString(),
-      members: [{
-        name: '太郎',
-        yesterday: [{
-          title: 'チケット#2'
-        },
-        {
-          title: 'チケット#4'
-        }],
-        today: [{title: 'チケット#3'}],
-        problem: [{title: '結合テスト環境が動いていない'}]
-      }]
+      members: []
     }
+  },
+  mounted () {
+    axios.get('data/').then(res => {
+      this.members = res.data
+    }).catch(err => {
+      console.error(err)
+    })
   }
 }
 </script>
