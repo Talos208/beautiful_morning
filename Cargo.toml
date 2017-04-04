@@ -5,3 +5,4 @@ authors = ["Talos208 <talos208@gmail.com>"]
 
 [dependencies]
 nickel="*"
+rustc-serialize = "0.3"
