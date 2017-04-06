@@ -5,11 +5,11 @@
       <h2>{{entry.member.name}}</h2>
       <h3>昨日したこと</h3>
       <ul id='yesterday'>
-        <li v-for='work in entry.yesterday'>{{work.title}}</li>
+        <li v-for='work in entry.done'>{{work.title}}</li>
       </ul>
       <h3>今日すること</h3>
       <ul id='today'>
-      <li v-for='work in entry.today'>{{work.title}}</li>
+      <li v-for='work in entry.to_do'>{{work.title}}</li>
       </ul>
       <h3>障害/業務外の予定</h3>
       <ul id='problem'>
@@ -31,7 +31,8 @@ export default {
   },
   mounted () {
     axios.get('data/').then(res => {
-      this.entries = res.data
+      this.date = res.data.date
+      this.entries = res.data.entries
     }).catch(err => {
       console.error(err)
     })
