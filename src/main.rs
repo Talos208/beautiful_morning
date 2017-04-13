@@ -3,14 +3,30 @@ extern crate nickel;
 extern crate rustc_serialize;
 extern crate chrono;
 
-use nickel::{Nickel, HttpRouter, StaticFilesHandler, Mountable, MediaType, NickelError, Action, Halt, Request};
+use nickel::{Nickel, HttpRouter, StaticFilesHandler, Mountable, MediaType, NickelError, Action, Halt, Request, Response, MiddlewareResult, JsonBody};
+use nickel::status::StatusCode;
+use nickel::extensions::Redirect;
 use rustc_serialize::json;
 use std::collections::HashMap;
+use std::hash::{Hash};
+use std::sync::Arc;
+use std::cmp::{Eq, PartialEq};
 use chrono::prelude::*;
+use std::io::Read;
 
-#[derive(RustcEncodable)]
+#[derive(RustcEncodable, Hash)]
 pub struct Member {
     pub name: String,
+    pub account: String,
+    pub password: String,   // FIXME encrypt!
+}
+
+impl PartialEq for Member {
+    fn eq(&self, other: &Member) -> bool {
+        self.account == other.account
+    }
+}
+impl Eq for Member {
 }
 
 #[derive(RustcEncodable, Clone)]
@@ -25,15 +41,15 @@ pub struct Issue {
 
 #[derive(RustcEncodable)]
 pub struct JsonEntry<'a> {
-    pub member: Member,
+    pub member: &'a String,
     pub done: &'a Vec<Work>,
     pub to_do: &'a Vec<Work>,
     pub problem: &'a Vec<Issue>
 }
 
-pub struct Daily {
-    pub entries: HashMap<String, Entry>
-}
+//pub struct Daily {
+//    pub entries: HashMap<String, Entry>
+//}
 
 #[derive(RustcEncodable)]
 pub struct JsonDaily<'a> {
@@ -51,12 +67,12 @@ pub struct Sprint {
     pub members: Vec<Member>
 }
 
-fn convert_to_json_entry(map: &HashMap<String, Entry>) -> JsonDaily {
+fn convert_to_json_entry<'a>(map: &'a HashMap<String, Box<Entry>>) -> JsonDaily {
     let mut result = JsonDaily{date: "".to_string(), entries:vec![]};
 
     for (k, v) in map.iter() {
         let e = JsonEntry{
-            member: Member{name: k.to_string()},
+            member: &(k),
             done: &(v.done),
             to_do: &(v.to_do),
             problem: &(v.problem)
@@ -67,20 +83,38 @@ fn convert_to_json_entry(map: &HashMap<String, Entry>) -> JsonDaily {
     result
 }
 
-fn main() {
-    let taro = Member { name: "太郎".to_string() };
-    let mut daily: HashMap<String, Entry> = HashMap::new();
+#[derive(RustcDecodable, Clone, Debug)]
+pub struct AuthRequest {
+    account: String,
+    password: String
+}
 
-    daily.insert(taro.name, Entry{
+
+//fn authenticator<'mw>(request: &mut Request, response: Response<'mw>, ) ->MiddlewareResult<'mw> {
+//    response.redirect("/login")
+////    response.error(StatusCode::Forbidden, "Access denied")
+//}
+
+fn main() {
+    let taro = Member { name: "太郎".to_string(), account: "taro".to_string(), password: "secret".to_string() };
+    let hanako = Member { name: "花子".to_string(), account: "hana".to_string(), password: "abc123".to_string() };
+    let mut members: Arc<Vec<Member>> = Arc::new(vec![
+        taro,
+        hanako
+    ]);
+
+    let mut daily: HashMap<String, Box<Entry>> = HashMap::new();
+
+    daily.insert(members[0].name.clone(), Box::new(Entry {
         done: vec![Work { title: "チケット#2".to_string() }, Work { title: "チケット#4".to_string() }],
         to_do: vec![Work { title: "チケット#3".to_string() }],
         problem: vec![Issue { title: "結合テスト環境が動いていない".to_string() }]
-    });
-    daily.insert("花子".to_string(), Entry{
+    }));
+    daily.insert(members[1].name.clone(), Box::new(Entry {
         done: vec![Work { title: "チケット#1".to_string() }],
         to_do: vec![Work { title: "チケット#1".to_string() }],
         problem: vec![Issue { title: "チケット＃１が終わらなくて大変".to_string() }]
-    });
+    }));
 
     let mut srv = Nickel::new();
 
@@ -93,6 +127,20 @@ fn main() {
         response.set(MediaType::Json);
         let result = convert_to_json_entry(&daily);
         json::encode(&result).unwrap()
+    });
+    srv.post("/login/", middleware! {|request, mut response|
+        let auth = request.json_as::<AuthRequest>().ok().unwrap();
+//        println!("{:?}", auth);
+        let acc = auth.account;
+        let pwd = auth.password;
+//        println!("{:?} {:?}", acc, pwd);
+        response.set(MediaType::Json);
+        if acc == members[0].account && pwd == members[0].password {
+            "{\"success\": \"true\", \"token\": \"123456789\"}"
+        } else {
+            response.set(StatusCode::Forbidden);
+            "{\"success\": \"false\"}"
+        }
     });
 
     fn custom_404<'a>(err: &mut NickelError, _req: &mut Request) -> Action {
