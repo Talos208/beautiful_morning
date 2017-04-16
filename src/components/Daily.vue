@@ -1,8 +1,8 @@
 <template>
   <div class="daily">
     <h1>{{date}}</h1>
-    <div v-for='entry in entries'>
-      <h2>{{entry.member.name}}</h2>
+    <div class="member" v-for='entry in entries'>
+      <h2>{{entry.member}}</h2>
       <h3>昨日したこと</h3>
       <ul id='yesterday'>
         <li v-for='work in entry.done'>{{work.title}}</li>
@@ -52,5 +52,8 @@ ul {
 li {
   display: inline-block;
   margin: 0 1em;
+}
+div.member {
+  display: inline-block;
 }
 </style>

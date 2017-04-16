@@ -3,6 +3,7 @@
     <input v-model="account" placeholder="Account"/>
     <input type="password" v-model="password" placeholder="********"/>
     <button v-on:click="login">Login</button>
+    <router-link to="register">Register...</router-link>
   </div>
 </template>
 
