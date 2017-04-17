@@ -23,9 +23,7 @@ export default {
   },
   methods: {
     register () {
-      var account = this.account
-      var password = this.password
-      axios.post('register/', {account: account, name: name, password: password}).then(res => {
+      axios.post('register/', {account: this.account, name: this.name, password: this.password}).then(res => {
         console.debug(this.$route.query.redirect)
         router.push('/')
       }).catch(err => {

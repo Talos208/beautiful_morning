@@ -2,21 +2,15 @@
 extern crate nickel;
 extern crate rustc_serialize;
 extern crate chrono;
-// extern crate core;
 
-use nickel::{Nickel, HttpRouter, StaticFilesHandler, Mountable, MediaType, NickelError, Action, Halt, Request, Response, MiddlewareResult, JsonBody};
+use nickel::{Nickel, HttpRouter, StaticFilesHandler, Mountable, MediaType, JsonBody};
 use nickel::status::StatusCode;
 use nickel::extensions::Redirect;
-// use nickel::extensions::response::Redirect::{redirect};
 use rustc_serialize::json;
 use std::collections::HashMap;
-use std::hash::{Hash};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::cmp::{Eq, PartialEq};
 use chrono::prelude::*;
-use std::io::Read;
-// use core::ops::DerefMut;
-// use core::borrow::BorrowMut;
 
 #[derive(RustcEncodable, RustcDecodable, Hash)]
 pub struct Member {
@@ -46,14 +40,10 @@ pub struct Issue {
 #[derive(RustcEncodable)]
 pub struct JsonEntry<'a> {
     pub member: &'a String,
-    pub done: &'a Vec<Work>,
-    pub to_do: &'a Vec<Work>,
-    pub problem: &'a Vec<Issue>
+    pub done: Vec<Work>,
+    pub to_do: Vec<Work>,
+    pub problem: Vec<Issue>
 }
-
-//pub struct Daily {
-//    pub entries: HashMap<String, Entry>
-//}
 
 #[derive(RustcEncodable)]
 pub struct JsonDaily<'a> {
@@ -71,17 +61,24 @@ pub struct Sprint {
     pub members: Vec<Member>
 }
 
-fn convert_to_json_entry<'a>(map: &'a HashMap<String, Box<Entry>>) -> JsonDaily {
+fn convert_to_json_entry<'a>(acc: &'a ServerData, map: &'a HashMap<String, Box<Entry>>) -> JsonDaily<'a> {
     let mut result = JsonDaily{date: "".to_string(), entries:vec![]};
 
-    for (k, v) in map.iter() {
-        let e = JsonEntry{
-            member: &(k),
-            done: &(v.done),
-            to_do: &(v.to_do),
-            problem: &(v.problem)
+    for m in acc.accounts.iter() {
+        match map.get(&m.name) {
+            Some(v) => result.entries.push(JsonEntry{
+                member: &m.name,
+                done: v.done.clone(),
+                to_do: v.to_do.clone(),
+                problem: v.problem.clone()
+            }),
+            None => result.entries.push(JsonEntry{
+                member: &m.name,
+                done: vec![],
+                to_do: vec![],
+                problem: vec![]
+            }),
         };
-        result.entries.push(e);
     }
     result.date = Local::today().format("%F").to_string();
     result
@@ -99,77 +96,100 @@ pub struct AuthRequest {
 ////    response.error(StatusCode::Forbidden, "Access denied")
 //}
 
+pub struct ServerData {
+    pub accounts: Vec<Member>
+}
+
+impl ServerData {
+    pub fn new() -> ServerData {
+        ServerData { accounts: vec![] }
+    }
+
+    pub fn is_member(&self, acc: &String) -> bool {
+        for m in self.accounts.iter() {
+            if *acc == m.account {
+                return true
+            }
+        }
+        false
+    }
+
+    pub fn authorize(&self, acc: &String, pwd: String) -> bool {
+        for m in self.accounts.iter() {
+            if *acc == m.account && pwd == m.password {
+                return true
+            }
+        }
+        false
+    }
+
+    pub fn add(&mut self, m: Member) -> &ServerData {
+        self.accounts.push(m);
+        return self
+    }
+}
+
+
 fn main() {
     let taro = Member { name: "太郎".to_string(), account: "taro".to_string(), password: "secret".to_string() };
     let hanako = Member { name: "花子".to_string(), account: "hana".to_string(), password: "abc123".to_string() };
-    let members: Arc<Vec<Member>> = Arc::new(vec![
-        taro,
-        hanako
-    ]);
 
     let mut daily: HashMap<String, Box<Entry>> = HashMap::new();
 
-    daily.insert(members[0].name.clone(), Box::new(Entry {
+    daily.insert(taro.name.clone(), Box::new(Entry {
         done: vec![Work { title: "チケット#2".to_string() }, Work { title: "チケット#4".to_string() }],
         to_do: vec![Work { title: "チケット#3".to_string() }],
         problem: vec![Issue { title: "結合テスト環境が動いていない".to_string() }]
     }));
-    daily.insert(members[1].name.clone(), Box::new(Entry {
+    daily.insert(hanako.name.clone(), Box::new(Entry {
         done: vec![Work { title: "チケット#1".to_string() }],
         to_do: vec![Work { title: "チケット#1".to_string() }],
         problem: vec![Issue { title: "チケット＃１が終わらなくて大変".to_string() }]
     }));
+    let mut sv_data = ServerData::new();
+    sv_data.add(taro);
+    sv_data.add(hanako);
 
-    let mut srv = Nickel::new();
+    let server_data = Arc::new(RwLock::new(sv_data));
 
-    // Serve contents build by "npm run build"
-    srv.utilize(middleware! {|request|
-        println!("request: {:?}", request.origin.uri);
-    });
-    srv.mount("/", StaticFilesHandler::new("./dist"));
-    srv.get("/data/", middleware! {|_, mut response|
-        response.set(MediaType::Json);
-        let result = convert_to_json_entry(&daily);
-        json::encode(&result).unwrap()
-    });
-    let members_for_login = members.clone();
-    srv.post("/login/", middleware! {|request, mut response|
-        let auth = request.json_as::<AuthRequest>().ok().unwrap();
-//        println!("{:?}", auth);
-        let acc = auth.account;
-        let pwd = auth.password;
-//        println!("{:?} {:?}", acc, pwd);
-        response.set(MediaType::Json);
-        for m in members_for_login.iter() {
-            if acc == m.account && pwd == m.password {
+    {
+        let mut srv = Nickel::with_data(server_data);
+
+        srv.utilize(middleware! {|request|
+            println!("request: {:?}", request.origin.uri);
+        });
+        srv.mount("/", StaticFilesHandler::new("./dist"));
+        srv.get("/data/", middleware! {|_, mut response| < Arc<RwLock<ServerData>> >
+            response.set(MediaType::Json);
+            let dt = &response.data().read().unwrap();
+            let result = convert_to_json_entry(dt, &daily);
+            json::encode(&result).unwrap()
+        });
+        srv.post("/login/", middleware! {|request, mut response| < Arc<RwLock<ServerData>> >
+            let auth = request.json_as::<AuthRequest>().ok().unwrap();
+            let acc = &auth.account;
+            let pwd = auth.password;
+            if response.data().read().unwrap().authorize(acc, pwd) {
+                response.set(MediaType::Json);
                 return response.send("{\"success\": \"true\", \"token\": \"123456789\"}")
             }
-        }
-        response.set(StatusCode::Forbidden);
-        "{\"success\": \"false\"}"
-    });
-    let members_for_register = members.clone();
-    srv.post("/register/", middleware! {|request, mut response|
-        let reg = request.json_as::<Member>().ok().unwrap();
-        response.set(MediaType::Json);
-        for m in members_for_register.iter() {
-            if reg.account == m.account {
+            response.set(StatusCode::Forbidden);
+            "{\"success\": \"false\"}"
+        });
+
+        srv.post("/register/", middleware! {|request, mut response| <Arc<RwLock<ServerData>> >
+            let reg = request.json_as::<Member>().ok().unwrap();
+            response.set(MediaType::Json);
+            if response.data().read().unwrap().is_member(&reg.account) {
                 response.set(StatusCode::BadRequest);
                 return response.send("{\"success\": \"false\"}")
             }
-        }
-        // TODO Create new account
+            response.server_data().write().unwrap().add(reg);
 
-        response.set(StatusCode::TemporaryRedirect);
-        return response.redirect("/")
-    });
+            response.set(StatusCode::TemporaryRedirect);
+            return response.redirect("/")
+        });
 
-    fn custom_404<'a>(err: &mut NickelError, _req: &mut Request) -> Action {
-        println!("error: {:?} {:?}", err.message, _req.origin.headers);
-        Halt(())
+        srv.listen("127.0.0.1:8000").expect("Failed to launch server");
     }
-    let custom_handler: fn(&mut NickelError, &mut Request) -> Action = custom_404;
-    srv.handle_error(custom_handler);
-
-    srv.listen("127.0.0.1:8000").expect("Failed to launch server");
 }

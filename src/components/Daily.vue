@@ -5,15 +5,24 @@
       <h2>{{entry.member}}</h2>
       <h3>昨日したこと</h3>
       <ul id='yesterday'>
-        <li v-for='work in entry.done'>{{work.title}}</li>
+        <template v-if="entry.done.length > 0">
+          <li v-for='work in entry.done'>{{work.title}}</li>
+        </template>
+        <li v-else>なし</li>
       </ul>
       <h3>今日すること</h3>
       <ul id='today'>
-      <li v-for='work in entry.to_do'>{{work.title}}</li>
+        <template v-if="entry.to_do.length > 0">
+          <li v-for='work in entry.to_do'>{{work.title}}</li>
+        </template>
+        <li v-else>なし</li>
       </ul>
       <h3>障害/業務外の予定</h3>
       <ul id='problem'>
-      <li v-for='issue in entry.problem'>{{issue.title}}</li>
+        <template v-if="entry.problem.length > 0">
+          <li v-for='issue in entry.problem'>{{issue.title}}</li>
+        </template>
+        <li v-else>なし</li>
       </ul>
     </div>
   </div>
