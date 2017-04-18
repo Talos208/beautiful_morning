@@ -7,3 +7,6 @@ authors = ["Talos208 <talos208@gmail.com>"]
 nickel="*"
 rustc-serialize = "0.3"
 chrono={version = "0.3", features = ["rustc-serialize"]}
+rust-crypto = "*"
+jwt = "*"
+hyper = "0.9.18"

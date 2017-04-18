@@ -22,11 +22,14 @@ var login = {
   },
   methods: {
     login () {
+      login.authToken = null
+      delete axios.defaults.headers.common['Authorization']
       var account = this.account
       var password = this.password
       axios.post('login/', {account: account, password: password}).then(res => {
         login.loggedIn = res.data.success
         login.authToken = res.data.token
+        axios.defaults.headers.common['Authorization'] = 'Bearer ' + login.authToken
         router.push(this.$route.query.redirect)
       }).catch(err => {
         console.error(err)

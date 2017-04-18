@@ -23,6 +23,7 @@ export default {
   },
   methods: {
     register () {
+      delete axios.defaults.headers.common['Authorization']
       axios.post('register/', {account: this.account, name: this.name, password: this.password}).then(res => {
         console.debug(this.$route.query.redirect)
         router.push('/')
