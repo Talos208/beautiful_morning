@@ -11,7 +11,7 @@ use hyper::header::{ Authorization, Bearer };
 use rustc_serialize::{json, base64};
 use rustc_serialize::base64::ToBase64;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{RwLock};
 use std::cmp::{Eq, PartialEq};
 //use std::str::FromStr;
 //use std::default::Default;
@@ -19,7 +19,7 @@ use chrono::prelude::*;
 use crypto::sha3::Sha3;
 use crypto::digest::Digest;
 
-#[derive(RustcEncodable, RustcDecodable, Hash)]
+#[derive(RustcEncodable, RustcDecodable, Hash, Clone)]
 pub struct Member {
     pub name: String,
     pub account: String,
@@ -68,29 +68,6 @@ pub struct Sprint {
     pub members: Vec<Member>
 }
 
-fn convert_to_json_entry<'a>(acc: &'a ServerData, map: &'a HashMap<String, Box<Entry>>) -> JsonDaily<'a> {
-    let mut result = JsonDaily{date: "".to_string(), entries:vec![]};
-
-    for m in acc.accounts.iter() {
-        match map.get(&m.name) {
-            Some(v) => result.entries.push(JsonEntry{
-                member: &m.name,
-                done: v.done.clone(),
-                to_do: v.to_do.clone(),
-                problem: v.problem.clone()
-            }),
-            None => result.entries.push(JsonEntry{
-                member: &m.name,
-                done: vec![],
-                to_do: vec![],
-                problem: vec![]
-            }),
-        };
-    }
-    result.date = Local::today().format("%F").to_string();
-    result
-}
-
 #[derive(RustcDecodable, Clone, Debug)]
 pub struct AuthRequest {
     account: String,
@@ -106,14 +83,36 @@ pub struct AuthResponse {
 
 pub struct ServerData {
     pub accounts: Vec<Member>,
-    pub auth: HashMap<String, String>
+    pub auth: HashMap<String, Member>,
+    pub daily: HashMap<Member, Entry>
 }
 
 static AUTH_SECRET: &'static str = "some_secret_key";
 
 impl ServerData {
     pub fn new() -> ServerData {
-        ServerData { accounts: vec![], auth: HashMap::new() }
+        ServerData { accounts: vec![], auth: HashMap::new(), daily: HashMap::new() }
+    }
+
+    pub fn seed() -> ServerData {
+        let mut sv_data = ServerData { accounts: vec![], auth: HashMap::new(), daily: HashMap::new() };
+        let taro = Member { name: "太郎".to_string(), account: "taro".to_string(), password: "secret".to_string() };
+
+        sv_data.add_member(taro);
+        sv_data.daily.insert(sv_data.accounts.last().unwrap().clone(), Entry {
+            done: vec![Work { title: "チケット#2".to_string() }, Work { title: "チケット#4".to_string() }],
+            to_do: vec![Work { title: "チケット#3".to_string() }],
+            problem: vec![Issue { title: "結合テスト環境が動いていない".to_string() }]
+        });
+
+        let hanako = Member { name: "花子".to_string(), account: "hana".to_string(), password: "abc123".to_string() };
+        sv_data.add_member(hanako);
+        sv_data.daily.insert(sv_data.accounts.last().unwrap().clone(), Entry {
+            done: vec![Work { title: "チケット#1".to_string() }],
+            to_do: vec![Work { title: "チケット#1".to_string() }],
+            problem: vec![Issue { title: "チケット＃１が終わらなくて大変".to_string() }]
+        });
+        sv_data
     }
 
     pub fn is_member(&self, acc: &String) -> bool {
@@ -143,25 +142,58 @@ impl ServerData {
         crypt.input_str(AUTH_SECRET);
         let result = crypt.result_str();
 
+        let m = self.member_called(acc).unwrap();
         let js = result.as_bytes().to_base64(base64::Config{
             char_set: base64::CharacterSet::Standard,
             newline: base64::Newline::CRLF,
             pad: false,
             line_length: None
         });
-        self.auth.insert(js.clone(), acc.clone());
+        self.auth.insert(js.clone(), m);
         js
     }
 
-    pub fn add(&mut self, m: Member) -> &ServerData {
+    pub fn add_member(&mut self, m: Member) -> &ServerData {
         self.accounts.push(m);
         return self
+    }
+
+    pub fn member_called(&self, acc: &String) -> Option<Member> {
+        for m in self.accounts.iter() {
+            if m.account == *acc {
+                return Some(m.clone())
+            }
+        }
+        None
+    }
+
+    pub fn to_json_entry(&self) -> JsonDaily {
+        let mut result = JsonDaily{date: "".to_string(), entries:vec![]};
+
+        for m in self.accounts.iter() {
+            match self.daily.get(m) {
+                Some(v) => result.entries.push(JsonEntry{
+                    member: &m.name,
+                    done: v.done.clone(),
+                    to_do: v.to_do.clone(),
+                    problem: v.problem.clone()
+                }),
+                None => result.entries.push(JsonEntry{
+                    member: &m.name,
+                    done: vec![],
+                    to_do: vec![],
+                    problem: vec![]
+                }),
+            };
+        }
+        result.date = Local::today().format("%F").to_string();
+        result
     }
 }
 
 header! { (XRequestUser, "X-Request-User") => [String] }
 
-fn authenticator<'mw, 'conn>(request: &mut Request<'mw, 'conn,  Arc<RwLock<ServerData>>>, response: Response<'mw,  Arc<RwLock<ServerData>>>) ->MiddlewareResult<'mw, Arc<RwLock<ServerData>>> {
+fn authenticator<'mw, 'conn, 'd>(request: &mut Request<'mw, 'conn,  RwLock<ServerData>>, response: Response<'mw,  RwLock<ServerData>>) ->MiddlewareResult<'mw, RwLock<ServerData>> {
     let uac: String;
     {
         let auth = request.origin.headers.get::<Authorization<Bearer>>();
@@ -171,7 +203,7 @@ fn authenticator<'mw, 'conn>(request: &mut Request<'mw, 'conn,  Arc<RwLock<Serve
                 let au = data.auth.get(&a.token);
                 match au {
                     Some(u) => {
-                        uac = u.clone()
+                        uac = u.account.clone()
                     },
                     None => return response.error(StatusCode::Forbidden, "Access denied")
                 }
@@ -184,26 +216,7 @@ fn authenticator<'mw, 'conn>(request: &mut Request<'mw, 'conn,  Arc<RwLock<Serve
 }
 
 fn main() {
-    let taro = Member { name: "太郎".to_string(), account: "taro".to_string(), password: "secret".to_string() };
-    let hanako = Member { name: "花子".to_string(), account: "hana".to_string(), password: "abc123".to_string() };
-
-    let mut daily: HashMap<String, Box<Entry>> = HashMap::new();
-
-    daily.insert(taro.name.clone(), Box::new(Entry {
-        done: vec![Work { title: "チケット#2".to_string() }, Work { title: "チケット#4".to_string() }],
-        to_do: vec![Work { title: "チケット#3".to_string() }],
-        problem: vec![Issue { title: "結合テスト環境が動いていない".to_string() }]
-    }));
-    daily.insert(hanako.name.clone(), Box::new(Entry {
-        done: vec![Work { title: "チケット#1".to_string() }],
-        to_do: vec![Work { title: "チケット#1".to_string() }],
-        problem: vec![Issue { title: "チケット＃１が終わらなくて大変".to_string() }]
-    }));
-    let mut sv_data = ServerData::new();
-    sv_data.add(taro);
-    sv_data.add(hanako);
-
-    let server_data = Arc::new(RwLock::new(sv_data));
+    let server_data = RwLock::new(ServerData::seed());
 
     {
         let mut srv = Nickel::with_data(server_data);
@@ -212,7 +225,7 @@ fn main() {
             println!("request: {:?}", request.origin.uri);
         });
         srv.mount("/", StaticFilesHandler::new("./dist"));
-        srv.post("/login/", middleware! {|request, mut response| < Arc<RwLock<ServerData>> >
+        srv.post("/login/", middleware! {|request, mut response| < RwLock<ServerData> >
             let auth = request.json_as::<AuthRequest>().ok().unwrap();
             let acc = &auth.account;
             let pwd = &auth.password;
@@ -243,14 +256,14 @@ fn main() {
                 }
             }
         });
-        srv.post("/register/", middleware! {|request, mut response| <Arc<RwLock<ServerData>> >
+        srv.post("/register/", middleware! {|request, mut response| < RwLock<ServerData> >
             let reg = request.json_as::<Member>().ok().unwrap();
             response.set(MediaType::Json);
             if response.data().read().unwrap().is_member(&reg.account) {
                 response.set(StatusCode::BadRequest);
                 return response.send("{\"success\": \"false\"}")
             }
-            response.server_data().write().unwrap().add(reg);
+            response.server_data().write().unwrap().add_member(reg);
 
             response.set(StatusCode::TemporaryRedirect);
             return response.redirect("/")
@@ -258,14 +271,14 @@ fn main() {
 
         // これ以降は認証が必要
         srv.utilize(authenticator);
-        srv.get("/data/", middleware! {|request, mut response| < Arc<RwLock<ServerData>> >
+        srv.get("/data/", middleware! {|request, mut response| < RwLock<ServerData> >
             {
                 let ref hdr = request.origin.headers;
                 let ref ru = hdr.get::<XRequestUser>().unwrap().0;
                 println!("Request user is {:?}", ru);
             }
             let dt = &response.data().read().unwrap();
-            let result = convert_to_json_entry(dt, &daily);
+            let result = dt.to_json_entry();
             match json::encode(&result) {
                 Ok(js) => {
                     response.set(MediaType::Json);
