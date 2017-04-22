@@ -1,8 +1,8 @@
 #[macro_use] extern crate nickel;
 extern crate rustc_serialize;
 extern crate chrono;
-extern crate crypto;
 #[macro_use] extern crate hyper;
+extern crate sha2;
 
 use nickel::{Nickel, HttpRouter, StaticFilesHandler, Mountable, MediaType, JsonBody, Request, Response, MiddlewareResult};
 use nickel::status::StatusCode;
@@ -16,8 +16,7 @@ use std::cmp::{Eq, PartialEq};
 //use std::str::FromStr;
 //use std::default::Default;
 use chrono::prelude::*;
-use crypto::sha3::Sha3;
-use crypto::digest::Digest;
+use sha2::{Sha256, Digest};
 
 #[derive(RustcEncodable, RustcDecodable, Hash, Clone)]
 pub struct Member {
@@ -134,21 +133,19 @@ impl ServerData {
     }
 
     pub fn authorize(&mut self, acc: &String, pwd: &String) -> String {
-        let mut crypt = Sha3::sha3_224();
-        crypt.reset();
-        crypt.input_str(format!("{:b}", UTC::now().timestamp()).as_str());
-        crypt.input_str(acc);
-        crypt.input_str(pwd);
-        crypt.input_str(AUTH_SECRET);
-        let result = crypt.result_str();
+        let mut crypt = Sha256::default();
+        crypt.input(AUTH_SECRET.as_bytes());
+        crypt.input(format!("{:b}", UTC::now().timestamp()).as_bytes());
+        crypt.input(acc.as_bytes());
+        crypt.input(pwd.as_bytes());
 
-        let m = self.member_called(acc).unwrap();
-        let js = result.as_bytes().to_base64(base64::Config{
+        let js = crypt.result().to_base64(base64::Config{
             char_set: base64::CharacterSet::Standard,
             newline: base64::Newline::CRLF,
             pad: false,
             line_length: None
         });
+        let m = self.member_called(acc).unwrap();
         self.auth.insert(js.clone(), m);
         js
     }
