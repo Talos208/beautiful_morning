@@ -3,6 +3,7 @@ import Router from 'vue-router'
 import Daily from '@/components/Daily'
 import Login from '@/components/Login'
 import Register from '@/components/Register'
+import Dashboard from '@/components/Dashboard'
 
 Vue.use(Router)
 
@@ -23,6 +24,11 @@ var router = new Router({
       path: '/register',
       name: 'Register',
       component: Register
+    },
+    {
+      path: '/dashboard',
+      name: 'Dashboard',
+      component: Dashboard
     }
   ]
 })
