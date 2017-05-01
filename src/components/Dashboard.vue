@@ -21,7 +21,11 @@
         <li class="issue">
           <h3>昨日したこと</h3>
           <ul id='yesterday'>
-            <li v-for="(work, index) in entries.yesterday"><input v-bind:value="work" v-on:change="updateYesterdayWork($event, index)"/></li>
+            <span v-on:click.capture="deleteYesterdayWork($event)" v-on:change="updateYesterdayWork($event)">
+            <li v-for="(work, index) in entries.yesterday">
+              <div :data-index="index"><input v-bind:value="work"/><button>-</button></div>
+            </li>
+            </span>
             <li>
               <button v-on:click="addYesterdayWork">+</button>
             </li>
@@ -30,7 +34,11 @@
         <li class="issue">
           <h3>今日すること</h3>
           <ul id='today' >
-            <li v-for="(work, index) in entries.today"><input v-bind:value="work" v-on:change="updateTodayWork($event, index)"/></li>
+            <span v-on:click.capture="deleteTodayWork($event)" v-on:change="updateTodayWork($event)">
+              <li v-for="(work, index) in entries.today">
+                <div :data-index="index"><input v-bind:value="work"/><button>-</button></div>
+              </li>
+            </span>
             <li>
               <button v-on:click="addTodayWork">+</button>
             </li>
@@ -39,7 +47,11 @@
         <li class="issue">
           <h3>障害/業務外の予定</h3>
           <ul id='problem'>
-            <li v-for="(issue, index) in entries.issue"><input v-bind:value="issue" v-on:change="updateIssue($event, index)"/></li>
+            <span v-on:click.capture="deleteIssue($event)" v-on:change="updateIssue($event)">
+            <li v-for="(issue, index) in entries.issue">
+              <div :data-index="index"><input v-bind:value="issue"/><button>-</button></div>
+            </li>
+            </span>
             <li>
               <button v-on:click="addIssue">+</button>
             </li>
@@ -117,20 +129,41 @@
       addYesterdayWork () {
         this.entries.yesterday.push('')
       },
-      updateYesterdayWork (work, index) {
+      updateYesterdayWork (work) {
+        let index = work.target.parentNode.dataset.index
         this.entries.yesterday[index] = work.target.value
+      },
+      deleteYesterdayWork (work) {
+        if (work.target instanceof HTMLButtonElement) {
+          let index = work.target.parentNode.dataset.index
+          this.entries.yesterday.splice(index, 1)
+        }
       },
       addTodayWork () {
         this.entries.today.push('')
       },
-      updateTodayWork (work, index) {
+      updateTodayWork (work) {
+        let index = work.target.parentNode.dataset.index
         this.entries.today[index] = work.target.value
+      },
+      deleteTodayWork (work) {
+        if (work.target instanceof HTMLButtonElement) {
+          let index = work.target.parentNode.dataset.index
+          this.entries.today.splice(index, 1)
+        }
       },
       addIssue () {
         this.entries.issue.push('')
       },
-      updateIssue (work, index) {
+      updateIssue (work) {
+        let index = work.target.parentNode.dataset.index
         this.entries.issue[index] = work.target.value
+      },
+      deleteIssue (work) {
+        if (work.target instanceof HTMLButtonElement) {
+          let index = work.target.parentNode.dataset.index
+          this.entries.issue.splice(index, 1)
+        }
       }
     }
   }
@@ -144,7 +177,6 @@
     text-align: center;
     width: 2em;
   }
-
   .calender td {
     text-align: center;
   }
