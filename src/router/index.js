@@ -10,7 +10,7 @@ Vue.use(Router)
 var router = new Router({
   routes: [
     {
-      path: '/',
+      path: '/daily',
       name: 'Daily',
       component: Daily,
       meta: {requireAuth: true}
@@ -26,9 +26,10 @@ var router = new Router({
       component: Register
     },
     {
-      path: '/dashboard',
+      path: '/',
       name: 'Dashboard',
-      component: Dashboard
+      component: Dashboard,
+      meta: {requireAuth: true}
     }
   ]
 })

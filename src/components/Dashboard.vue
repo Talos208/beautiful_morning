@@ -23,7 +23,7 @@
           <ul id='yesterday'>
             <span v-on:click.capture="deleteYesterdayWork($event)" v-on:change="updateYesterdayWork($event)">
             <li v-for="(work, index) in entries.yesterday">
-              <div :data-index="index"><input v-bind:value="work"/><button>-</button></div>
+              <div :data-index="index"><input v-bind:value="work.title"/><button>-</button></div>
             </li>
             </span>
             <li>
@@ -36,7 +36,7 @@
           <ul id='today' >
             <span v-on:click.capture="deleteTodayWork($event)" v-on:change="updateTodayWork($event)">
               <li v-for="(work, index) in entries.today">
-                <div :data-index="index"><input v-bind:value="work"/><button>-</button></div>
+                <div :data-index="index"><input v-bind:value="work.title"/><button>-</button></div>
               </li>
             </span>
             <li>
@@ -49,7 +49,7 @@
           <ul id='problem'>
             <span v-on:click.capture="deleteIssue($event)" v-on:change="updateIssue($event)">
             <li v-for="(issue, index) in entries.issue">
-              <div :data-index="index"><input v-bind:value="issue"/><button>-</button></div>
+              <div :data-index="index"><input v-bind:value="issue.title"/><button>-</button></div>
             </li>
             </span>
             <li>
@@ -63,6 +63,7 @@
 </template>
 
 <script>
+  import axios from 'axios'
   export default {
     name: 'dashboard',
     data () {
@@ -100,12 +101,27 @@
         this.weeks.push(days)
       }
     },
+    mounted () {
+      this.loadData()
+    },
     methods: {
       dateClicked (ev) {
         this.today = parseInt(ev.target.textContent)
-        this.entries.yesterday = []
-        this.entries.today = []
-        this.entries.issue = []
+        this.loadData()
+      },
+      loadData () {
+        let ds = '' + this.year + ('0' + this.month).substr(-2) + ('0' + this.today).substr(-2)
+        axios.get('/entry/' + ds).then(res => {
+  //      console.log(res.data)
+          this.entries.yesterday = res.data.done
+          this.entries.today = res.data.to_do
+          this.entries.issue = res.data.problem
+        }).catch(err => {
+          this.entries.yesterday = []
+          this.entries.today = []
+          this.entries.issue = []
+          console.error(err)
+        })
       },
       calendarClass (day) {
         let ret = {

@@ -57,6 +57,7 @@ pub struct JsonDaily<'a> {
     pub entries: Vec<JsonEntry<'a>>
 }
 
+#[derive(RustcEncodable)]
 pub struct Entry {
     pub done: Vec<Work>,
     pub to_do: Vec<Work>,
@@ -186,6 +187,25 @@ impl ServerData {
         result.date = Local::today().format("%F").to_string();
         result
     }
+
+    pub fn entries_for(&self, m: &Member) -> Entry {
+        let mut result = Entry{
+            done: vec![],
+            to_do: vec![],
+            problem: vec![]
+        };
+
+        match self.daily.get(m) {
+            Some(v) => {
+                result.done = v.done.clone();
+                result.to_do = v.to_do.clone();
+                result.problem = v.problem.clone();
+            },
+            None => {}
+        }
+
+        return result
+    }
 }
 
 header! { (XRequestUser, "X-Request-User") => [String] }
@@ -277,6 +297,35 @@ fn main() {
             let dt = &response.data().read().unwrap();
             let result = dt.to_json_entry();
             match json::encode(&result) {
+                Ok(js) => {
+                    response.set(MediaType::Json);
+                    js
+                },
+                Err(e) => {
+                    response.set(StatusCode::InternalServerError);
+                    format!("{:?}", e)
+                }
+            }
+        });
+        srv.get("/entry/:date", middleware! {|request, mut response| < RwLock<ServerData> >
+            let ref hdr = request.origin.headers;
+            let ref run = hdr.get::<XRequestUser>().unwrap().0;
+            println!("Request user for entry is {:?}", run);
+
+            let date = request.param("date");
+            match date {
+                Some(ref d) => {
+                    println!("{:?}", d);
+                },
+                None => {
+                    return response.error(StatusCode::NotFound, "Fail to get date")
+                }
+            };
+
+            let dt = &response.data().read().unwrap();
+            let ru = dt.member_called(run).unwrap();
+            let ent = dt.entries_for(&ru);
+            match json::encode(&ent) {
                 Ok(js) => {
                     response.set(MediaType::Json);
                     js
