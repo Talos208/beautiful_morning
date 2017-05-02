@@ -33,12 +33,12 @@ impl PartialEq for Member {
 impl Eq for Member {
 }
 
-#[derive(RustcEncodable, Clone)]
+#[derive(RustcEncodable, RustcDecodable, Clone, Debug)]
 pub struct Work {
     pub title: String,
 }
 
-#[derive(RustcEncodable, Clone)]
+#[derive(RustcEncodable, RustcDecodable, Clone, Debug)]
 pub struct Issue {
     pub title: String,
 }
@@ -335,6 +335,36 @@ fn main() {
                     format!("{:?}", e)
                 }
             }
+        });
+        srv.post("/entry/:date/done", middleware! {|request, mut response| < RwLock<ServerData> >
+            let req = request.json_as::<Vec<Work>>();
+            match req {
+                Ok(x) => println!("Done {:?}", x),
+                Err(e) => return response.error(StatusCode::InternalServerError, format!("{:?}", e))
+            };
+
+            response.set(MediaType::Json);
+            "{}"
+        });
+        srv.post("/entry/:date/todo", middleware! {|request, mut response| < RwLock<ServerData> >
+            let req = request.json_as::<Vec<Work>>();
+            match req {
+                Ok(x) => println!("Todo {:?}", x),
+                Err(e) => return response.error(StatusCode::InternalServerError, format!("{:?}", e))
+            };
+
+            response.set(MediaType::Json);
+            "{}"
+        });
+        srv.post("/entry/:date/problem", middleware! {|request, mut response| < RwLock<ServerData> >
+            let req = request.json_as::<Vec<Issue>>();
+            match req {
+                Ok(x) => println!("Problem {:?}", x),
+                Err(e) => return response.error(StatusCode::InternalServerError, format!("{:?}", e))
+            };
+
+            response.set(MediaType::Json);
+            "{}"
         });
 
         srv.listen("127.0.0.1:8000").expect("Failed to launch server");

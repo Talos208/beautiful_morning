@@ -109,10 +109,12 @@
         this.today = parseInt(ev.target.textContent)
         this.loadData()
       },
+      dateStr () {
+        let ds = '' + this.year + ('0' + (this.month + 1)).substr(-2) + ('0' + this.today).substr(-2)
+        return ds
+      },
       loadData () {
-        let ds = '' + this.year + ('0' + this.month).substr(-2) + ('0' + this.today).substr(-2)
-        axios.get('/entry/' + ds).then(res => {
-  //      console.log(res.data)
+        axios.get('/entry/' + this.dateStr()).then(res => {
           this.entries.yesterday = res.data.done
           this.entries.today = res.data.to_do
           this.entries.issue = res.data.problem
@@ -143,11 +145,15 @@
         return ret
       },
       addYesterdayWork () {
-        this.entries.yesterday.push('')
+        this.entries.yesterday.push({title: ''})
       },
       updateYesterdayWork (work) {
         let index = work.target.parentNode.dataset.index
-        this.entries.yesterday[index] = work.target.value
+        this.entries.yesterday[index].title = work.target.value
+        axios.post('/entry/' + this.dateStr() + '/done', this.entries.yesterday).then(res => {
+        }).catch(err => {
+          console.error(err)
+        })
       },
       deleteYesterdayWork (work) {
         if (work.target instanceof HTMLButtonElement) {
@@ -156,11 +162,15 @@
         }
       },
       addTodayWork () {
-        this.entries.today.push('')
+        this.entries.today.push({title: ''})
       },
       updateTodayWork (work) {
         let index = work.target.parentNode.dataset.index
-        this.entries.today[index] = work.target.value
+        this.entries.today[index].title = work.target.value
+        axios.post('/entry/' + this.dateStr() + '/todo', this.entries.today).then(res => {
+        }).catch(err => {
+          console.error(err)
+        })
       },
       deleteTodayWork (work) {
         if (work.target instanceof HTMLButtonElement) {
@@ -169,11 +179,15 @@
         }
       },
       addIssue () {
-        this.entries.issue.push('')
+        this.entries.issue.push({title: ''})
       },
       updateIssue (work) {
         let index = work.target.parentNode.dataset.index
-        this.entries.issue[index] = work.target.value
+        this.entries.issue[index].title = work.target.value
+        axios.post('/entry/' + this.dateStr() + '/problem', this.entries.issue).then(res => {
+        }).catch(err => {
+          console.error(err)
+        })
       },
       deleteIssue (work) {
         if (work.target instanceof HTMLButtonElement) {
