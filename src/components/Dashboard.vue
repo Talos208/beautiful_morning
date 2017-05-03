@@ -159,6 +159,10 @@
         if (work.target instanceof HTMLButtonElement) {
           let index = work.target.parentNode.dataset.index
           this.entries.yesterday.splice(index, 1)
+          axios.delete('/entry/' + this.dateStr() + '/done/' + index).then(res => {
+          }).catch(err => {
+            console.error(err)
+          })
         }
       },
       addTodayWork () {
@@ -176,6 +180,10 @@
         if (work.target instanceof HTMLButtonElement) {
           let index = work.target.parentNode.dataset.index
           this.entries.today.splice(index, 1)
+          axios.delete('/entry/' + this.dateStr() + '/todo/' + index).then(res => {
+          }).catch(err => {
+            console.error(err)
+          })
         }
       },
       addIssue () {
@@ -193,6 +201,10 @@
         if (work.target instanceof HTMLButtonElement) {
           let index = work.target.parentNode.dataset.index
           this.entries.issue.splice(index, 1)
+          axios.delete('/entry/' + this.dateStr() + '/problem/' + index).then(res => {
+          }).catch(err => {
+            console.error(err)
+          })
         }
       }
     }

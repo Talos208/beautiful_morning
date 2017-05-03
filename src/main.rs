@@ -242,6 +242,16 @@ impl ServerData {
         }
     }
 
+    pub fn delete_done_at(&mut self, user: &Member, id: usize) -> bool {
+        match self.daily.get_mut(user) {
+            Some(v) => {
+                v.done.remove(id);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn update_todo(&mut self, user: &Member, todo: &Vec<Work>) -> bool {
         match self.daily.get_mut(user) {
             Some(v) => {
@@ -252,10 +262,30 @@ impl ServerData {
         }
     }
 
+    pub fn delete_todo_at(&mut self, user: &Member, id: usize) -> bool {
+        match self.daily.get_mut(user) {
+            Some(v) => {
+                v.to_do.remove(id);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn update_problem(&mut self, user: &Member, problem: &Vec<Issue>) -> bool {
         match self.daily.get_mut(user) {
             Some(v) => {
                 v.problem = problem.to_vec();
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn delete_problem_at(&mut self, user: &Member, id: usize) -> bool {
+        match self.daily.get_mut(user) {
+            Some(v) => {
+                v.problem.remove(id);
                 true
             }
             None => false,
@@ -407,6 +437,31 @@ fn main() {
             response.set(MediaType::Json);
             "{}"
         });
+        srv.delete("/entry/:date/done/:id",
+                   middleware! {|request, mut response| < RwLock<ServerData> >
+            let id_param = request.param("id");
+            let id: usize = match id_param {
+                Some(ref d) => {
+                    match d.parse::<usize>() {
+                      Ok(v) => v,
+                      Err(e) => {
+                        return response.error(StatusCode::BadRequest, format!("{:?}", e))
+                      }
+                    }
+                },
+                None => {
+                    return response.error(StatusCode::NotFound, "Fail to get date")
+                }
+            };
+
+            let ref run = request.origin.headers.get::<XRequestUser>().unwrap().0;
+            let ref mut dt = response.data().write().unwrap();
+            let ref ru = dt.member_called(run).unwrap();
+            dt.delete_done_at(ru, id);
+
+            response.set(MediaType::Json);
+            "{}"
+        });
         srv.post("/entry/:date/todo",
                  middleware! {|request, mut response| < RwLock<ServerData> >
             let req = request.json_as::<Vec<Work>>();
@@ -424,6 +479,31 @@ fn main() {
             response.set(MediaType::Json);
             "{}"
         });
+        srv.delete("/entry/:date/todo/:id",
+                   middleware! {|request, mut response| < RwLock<ServerData> >
+            let id_param = request.param("id");
+            let id: usize = match id_param {
+                Some(ref d) => {
+                    match d.parse::<usize>() {
+                      Ok(v) => v,
+                      Err(e) => {
+                        return response.error(StatusCode::BadRequest, format!("{:?}", e))
+                      }
+                    }
+                },
+                None => {
+                    return response.error(StatusCode::NotFound, "Fail to get date")
+                }
+            };
+
+            let ref run = request.origin.headers.get::<XRequestUser>().unwrap().0;
+            let ref mut dt = response.data().write().unwrap();
+            let ref ru = dt.member_called(run).unwrap();
+            dt.delete_todo_at(ru, id);
+
+            response.set(MediaType::Json);
+            "{}"
+        });
         srv.post("/entry/:date/problem",
                  middleware! {|request, mut response| < RwLock<ServerData> >
             let req = request.json_as::<Vec<Issue>>();
@@ -437,6 +517,31 @@ fn main() {
                 },
                 Err(e) => return response.error(StatusCode::InternalServerError, format!("{:?}", e))
             };
+
+            response.set(MediaType::Json);
+            "{}"
+        });
+        srv.delete("/entry/:date/problem/:id",
+                   middleware! {|request, mut response| < RwLock<ServerData> >
+            let id_param = request.param("id");
+            let id: usize = match id_param {
+                Some(ref d) => {
+                    match d.parse::<usize>() {
+                      Ok(v) => v,
+                      Err(e) => {
+                        return response.error(StatusCode::BadRequest, format!("{:?}", e))
+                      }
+                    }
+                },
+                None => {
+                    return response.error(StatusCode::NotFound, "Fail to get date")
+                }
+            };
+
+            let ref run = request.origin.headers.get::<XRequestUser>().unwrap().0;
+            let ref mut dt = response.data().write().unwrap();
+            let ref ru = dt.member_called(run).unwrap();
+            dt.delete_problem_at(ru, id);
 
             response.set(MediaType::Json);
             "{}"
