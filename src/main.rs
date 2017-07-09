@@ -1,27 +1,32 @@
 #[macro_use]
 extern crate nickel;
-extern crate rustc_serialize;
+extern crate serde;
+extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
+
 extern crate chrono;
 #[macro_use]
 extern crate hyper;
 extern crate sha2;
+extern crate base64;
 
 use nickel::{Nickel, HttpRouter, StaticFilesHandler, Mountable, MediaType, JsonBody, Request,
              Response, MiddlewareResult};
 use nickel::status::StatusCode;
 use nickel::extensions::Redirect;
 use hyper::header::{Authorization, Bearer};
-use rustc_serialize::{json, base64};
-use rustc_serialize::base64::ToBase64;
+use base64::{encode, decode};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use std::cmp::{Eq, PartialEq};
-//use std::str::FromStr;
-//use std::default::Default;
+use std::io::Read;
+use std::borrow::BorrowMut;
+use std::str::FromStr;
 use chrono::prelude::*;
 use sha2::{Sha256, Digest};
 
-#[derive(RustcEncodable, RustcDecodable, Hash, Clone)]
+#[derive(Serialize, Deserialize, Hash, Clone)]
 pub struct Member {
     pub name: String,
     pub account: String,
@@ -35,17 +40,17 @@ impl PartialEq for Member {
 }
 impl Eq for Member {}
 
-#[derive(RustcEncodable, RustcDecodable, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Work {
     pub title: String,
 }
 
-#[derive(RustcEncodable, RustcDecodable, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Issue {
     pub title: String,
 }
 
-#[derive(RustcEncodable)]
+#[derive(Serialize)]
 pub struct JsonEntry<'a> {
     pub member: &'a String,
     pub done: Vec<Work>,
@@ -53,13 +58,13 @@ pub struct JsonEntry<'a> {
     pub problem: Vec<Issue>,
 }
 
-#[derive(RustcEncodable)]
+#[derive(Serialize)]
 pub struct JsonDaily<'a> {
     pub date: String,
     pub entries: Vec<JsonEntry<'a>>,
 }
 
-#[derive(RustcEncodable)]
+#[derive(Serialize)]
 pub struct Entry {
     pub done: Vec<Work>,
     pub to_do: Vec<Work>,
@@ -70,13 +75,13 @@ pub struct Sprint {
     pub members: Vec<Member>,
 }
 
-#[derive(RustcDecodable, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct AuthRequest {
     account: String,
     password: String,
 }
 
-#[derive(RustcEncodable, Debug)]
+#[derive(Serialize, Debug)]
 pub struct AuthResponse {
     pub success: bool,
     pub token: Option<String>,
@@ -158,12 +163,7 @@ impl ServerData {
         crypt.input(acc.as_bytes());
         crypt.input(pwd.as_bytes());
 
-        let js = crypt.result().to_base64(base64::Config {
-                                              char_set: base64::CharacterSet::Standard,
-                                              newline: base64::Newline::CRLF,
-                                              pad: false,
-                                              line_length: None,
-                                          });
+        let js = base64::encode(crypt.result().as_slice());
         let m = self.member_called(acc).unwrap();
         self.auth.insert(js.clone(), m);
         js
@@ -329,7 +329,13 @@ fn main() {
         srv.mount("/", StaticFilesHandler::new("./dist"));
         srv.post("/login/",
                  middleware! {|request, mut response| < RwLock<ServerData> >
-            let auth = request.json_as::<AuthRequest>().ok().unwrap();
+            let mut reqbuf: String = String::new();
+            request.origin.read_to_string(reqbuf.borrow_mut());
+            let auth: AuthRequest =
+                match serde_json::from_str(reqbuf.as_str()) {
+                    Ok(x) => x,
+                    Err(e) => return response.error(StatusCode::BadRequest, format!("{:?}", e))
+                };
             let acc = &auth.account;
             let pwd = &auth.password;
             let res =
@@ -348,7 +354,7 @@ fn main() {
                         explain: String::from("Login fail.")
                     }
                 };
-            match json::encode(&res) {
+            match serde_json::to_string(&res) {
                 Ok(js) => {
                     response.set(MediaType::Json);
                     js
@@ -361,7 +367,14 @@ fn main() {
         });
         srv.post("/register/",
                  middleware! {|request, mut response| < RwLock<ServerData> >
-            let reg = request.json_as::<Member>().ok().unwrap();
+            let mut reqbuf: String = String::new();
+            request.origin.read_to_string(reqbuf.borrow_mut());
+            let reg0 = serde_json::from_str(reqbuf.as_str());
+            let reg: Member =
+            match reg0 {
+                Ok(x) => x,
+                Err(e) => return response.error(StatusCode::BadRequest, format!("{:?}", e))
+            };
             response.set(MediaType::Json);
             if response.data().read().unwrap().is_member(&reg.account) {
                 response.set(StatusCode::BadRequest);
@@ -379,7 +392,7 @@ fn main() {
                 middleware! {|request, mut response| < RwLock<ServerData> >
             let dt = &response.data().read().unwrap();
             let result = dt.to_json_entry();
-            match json::encode(&result) {
+            match serde_json::to_string(&result) {
                 Ok(js) => {
                     response.set(MediaType::Json);
                     js
@@ -409,7 +422,7 @@ fn main() {
             let dt = &response.data().read().unwrap();
             let ru = dt.member_called(run).unwrap();
             let ent = dt.entries_for(&ru);
-            match json::encode(&ent) {
+            match serde_json::to_string(&ent) {
                 Ok(js) => {
                     response.set(MediaType::Json);
                     js
@@ -422,7 +435,9 @@ fn main() {
         });
         srv.post("/entry/:date/done",
                  middleware! {|request, mut response| < RwLock<ServerData> >
-            let req = request.json_as::<Vec<Work>>();
+            let mut reqbuf: String = String::new();
+            request.origin.read_to_string(reqbuf.borrow_mut());
+            let req: Result<Vec<Work>, _> = serde_json::from_str(reqbuf.as_str());
             match req {
                 Ok(x) => {
 //                    println!("Done {:?}", x);
@@ -464,7 +479,9 @@ fn main() {
         });
         srv.post("/entry/:date/todo",
                  middleware! {|request, mut response| < RwLock<ServerData> >
-            let req = request.json_as::<Vec<Work>>();
+            let mut reqbuf: String = String::new();
+            request.origin.read_to_string(reqbuf.borrow_mut());
+            let req: Result<Vec<Work>,_> = serde_json::from_str(reqbuf.as_str());
             match req {
                 Ok(x) => {
 //                    println!("Todo {:?}", x)
@@ -506,7 +523,9 @@ fn main() {
         });
         srv.post("/entry/:date/problem",
                  middleware! {|request, mut response| < RwLock<ServerData> >
-            let req = request.json_as::<Vec<Issue>>();
+            let mut reqbuf: String = String::new();
+            request.origin.read_to_string(reqbuf.borrow_mut());
+            let req: Result<Vec<Issue>,_> = serde_json::from_str(reqbuf.as_str());
             match req {
                 Ok(x) => {
 //                    println!("Problem {:?}", x)
